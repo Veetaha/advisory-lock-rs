@@ -50,6 +50,7 @@ pub enum FileLockMode {
 pub struct AdvisoryFileLock {
     /// An underlying file.
     file: File,
+    locked: bool,
     /// A file lock mode, shared or exclusive.
     file_lock_mode: FileLockMode,
 }
@@ -69,6 +70,7 @@ impl AdvisoryFileLock {
 
         Ok(AdvisoryFileLock {
             file,
+            locked: false,
             file_lock_mode,
         })
     }
@@ -87,24 +89,33 @@ impl AdvisoryFileLock {
     ///
     /// `lock` is blocking; it will block the current thread until it succeeds or errors.
     pub fn lock(&mut self) -> Result<(), FileLockError> {
-        self.lock_impl()
+        self.lock_impl()?;
+        self.locked = true;
+        Ok(())
     }
 
     /// Try to acquire the advisory file lock.
     ///
     /// `try_lock` returns immediately.
     pub fn try_lock(&mut self) -> Result<(), FileLockError> {
-        self.try_lock_impl()
+        self.try_lock_impl()?;
+        self.locked = true;
+        Ok(())
     }
 
     /// Unlock this advisory file lock.
     pub fn unlock(&mut self) -> Result<(), FileLockError> {
-        self.unlock_impl()
+        self.unlock_impl()?;
+        self.locked = false;
+        Ok(())
     }
 }
 
 impl Drop for AdvisoryFileLock {
     fn drop(&mut self) {
+        if !self.locked {
+            return;
+        }
         if let Err(err) = self.unlock() {
             log::error!(
                 "[AdvisoryFileLock] unlock_file failed during dropping: {}",
